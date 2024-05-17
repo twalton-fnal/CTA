@@ -43,7 +43,7 @@ def _GetTopDirectoryFileCount() :
 
 
 """
-get the size of files in directory
+get the size of files in the directory
 """
 def _GetTopDirectorySize() :
 
@@ -116,7 +116,7 @@ def _GetNovaData() :
     total_file_sizes = 0
 
     # open file and get file sizes
-    tdir  = "/exp/dune/app/users/twalton/CTA"
+    tdir  = "/exp/dune/app/users/twalton/CTA/text"
     fnova = open("%s/nova.files.txt" % tdir, "r")
     lnova = fnova.readlines()
 
