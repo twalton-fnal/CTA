@@ -6,9 +6,9 @@
 # modified by Tammy Walton
 #---------------------------
 
-import sys, re, os, time, datetime
+import sys, re, os, time
 import matplotlib.pyplot as plt
-
+from datetime import datetime
 
 
 """
@@ -17,7 +17,7 @@ Get the data by dates
 
 def _GetDataFilesExtRangeForWrite() :
 
-    flist = [   ["2024-05-07-18-20-00", "2024-05-07-19-20-00",  "10"] 
+    flist = [   ["2024-05-07-18-20-00", "2024-05-07-19-20-00",  "10"]
               , ["2024-05-07-20-00-00", "2024-05-07-21-15-00",  "9"]
               , ["2024-05-07-21-30-00", "2024-05-08-09-00-00",  "8"]
               , ["2024-05-08-09-30-00", "2024-05-08-13-45-00",  "7"]
@@ -26,7 +26,7 @@ def _GetDataFilesExtRangeForWrite() :
               , ["2024-05-08-19-15-00", "2024-05-08-22-15-00",  "4"]
               , ["2024-05-08-22-30-00", "2024-05-08-23-30-00",  "3"]
               , ["2024-05-09-09-00-00", "2024-05-09-10-50-00",  "2"]
-              , ["2024-05-09-11-20-00", "2024-05-09-00-55-00",  "1"]
+              , ["2024-05-09-11-20-00", "2024-05-09-12-55-00",  "1"]
               , ["2024-05-09-13-30-00", "2024-05-09-18-00-00",  "0.9"]
               , ["2024-05-09-18-25-00", "2024-05-09-20-30-00",  "0.8"]
               , ["2024-05-09-21-00-00", "2024-05-10-17-15-00",  "0.7"]
@@ -65,6 +65,8 @@ get the prometheus data
 def _GetPrometheusData( vname, dtype ) :
     print( "\tEnter GetPrometheusData[ %s ] for the %s test" % (vname,dtype) )
 
+    verbosity  = True
+
     data       = {}
     session_id = 0     
     count      = 0
@@ -84,38 +86,44 @@ def _GetPrometheusData( vname, dtype ) :
        print( "\t\tthe number of dates for the read test is [%d]" % len(dataByDates) )
 
 
+    # loop over dates
     for dataInRange in dataByDates :
-        ibegin = time.strptime(dataInRange[0], "%Y-%m-%d-%H-%M-%S")
-        iend   = time.strptime(dataInRange[1], "%Y-%m-%d-%H-%M-%S")
+        ibegin = datetime.strptime(dataInRange[0], "%Y-%m-%d-%H-%M-%S")
+        iend   = datetime.strptime(dataInRange[1], "%Y-%m-%d-%H-%M-%S")
      
-        print( "\t\t\tbegin and end times [%s/%s]" % (dataInRange[0],dataInRange[1]) )
+        print( "\t\t\tbegin and end times [( %s ) :: ( %s )]" % (dataInRange[0],dataInRange[1]) )
  
         values = {}
         size   = dataInRange[2]
 
         for v, vfile in enumerate(os.listdir(topdir)) :
             if vfile.find(vname) == -1 : continue
-
+            
             """
             if v%100 == 0 :
                print( "\tat file [%d/%d : %s]" % (v,len(os.listdir(topdir)),vfile) )
             """
 
             fdate = vfile.split(".")[-1]
-            ftimestamp = time.strptime(fdate, "%Y-%m-%d-%H-%M-%S")
-
+            ftimestamp = datetime.strptime(fdate, "%Y-%m-%d-%H-%M-%S")
+             
             if ftimestamp < ibegin : continue
             if ftimestamp > iend   : continue
 
+
             fpath  = "%s/%s" % (topdir,vfile)
             vlines = open(fpath,'r').readlines()
+            
+           
+            if verbosity :
+               if len(vlines) > 1 : 
+                  print( "\t\t\t  at file [%d/%d : %s with lines(%d)]" % (v,len(os.listdir(topdir)),vfile,len(vlines)) )
+               else : continue
+            else :
+               if len(vlines) <= 1 : continue
 
-            if len(vlines) > 1 : 
-               print( "\t\t\t  at file [%d/%d : %s with lines(%d)]" % (v,len(os.listdir(topdir)),vfile,len(vlines)) )
-            else : continue
 
             count += 1
-
             for vline in vlines: 
                 if "session_id" in vline:
                    session_id_re = re.compile(r".*session_id=\"(\d+)\"")
@@ -125,6 +133,7 @@ def _GetPrometheusData( vname, dtype ) :
                 elif " @[" in vline :
                    var, timestamp = vline[:-2].split(" @[")
                    values[session_id][int(timestamp)] = int(var)
+
 
         print( "\t\t\t number of passing files [%d]" % count )
         print( "\t\t\t number of session is [%d]" % len(values) )
@@ -151,15 +160,17 @@ def _MatchTransferredByteAndElaspedTimeData( transferedBytesData, elapsedTimeDat
 
     for key, values in transferedBytesData.items() :
         i = -1
-        print("\t\tkey is %s MB" % key)
+        #print("\t\tkey is %s MB" % key)
   
         dataValues = {}
         elapsedTimeDataValues = elapsedTimeData[key]
 
         if len(values) != len(elapsedTimeDataValues) :
            sys.exit( "ERROR - cannot match the bytes transferred [%s] to elapsed time, sizes are not equal [%d,%d]" % (key,len(values),len(elapsedTimeDataValues)) ) 
+        """
         else :
            print( "\t\t  sizes of the data [%d,%d]" % (len(values),len(elapsedTimeDataValues)) ) 
+        """
 
         for sessionid, bytesData in values.items() :
             i += 1
@@ -176,8 +187,8 @@ def _MatchTransferredByteAndElaspedTimeData( transferedBytesData, elapsedTimeDat
                 if int(timestamp) in elapsedTimeDataValues.get(sessionid,{}) :
                    timeData = elapsedTimeDataValues[sessionid][int(timestamp)] #the elapsed time
                    tmp.append( [timeData,bytes] )
-                else :
-                    print( "\t\tMatching transferred bytes and elasped time data failed for session id and timestamp [%s, %s]!" % (sessionid,timestamp) )
+                #else :
+                #    print( "\t\tMatching transferred bytes and elasped time data failed for session id and timestamp [%s, %s]!" % (sessionid,timestamp) )
 
 
                 """
@@ -195,7 +206,7 @@ def _MatchTransferredByteAndElaspedTimeData( transferedBytesData, elapsedTimeDat
             if len(tmp) > 0 :
                dataValues[sessionid] = tmp
 
-        print( "\t\t\tnumber of session ids [%d]" % len(dataValues) )
+        #print( "\t\t\tnumber of session ids [%d]" % len(dataValues) )
         data[key] = dataValues
 
 
@@ -214,7 +225,7 @@ def _CalculateThroughput( ntuple ) :
     data = {}
     for key, values in ntuple.items() :
     
-        print( "\t\tat key [%s MB]" % key )
+        #print( "\t\tat key [%s MB]" % key )
         s = 0
         dataValues = {}
 
@@ -238,7 +249,7 @@ def _CalculateThroughput( ntuple ) :
             dataValues[sessionid] = info
             s += 1
 
-        print( "\t\t number of session ids [%d]" % len(dataValues) )
+        #print( "\t\t number of session ids [%d]" % len(dataValues) )
         data[key] = dataValues 
 
     print( "\tExit CalculateThroughput\n")
@@ -294,15 +305,19 @@ def _PlotDataByFileSize( dataPerFileSize, dtype ) :
         xdata.append( float(key) )
         ydata.append( value )
 
-    plt.xlabel( 'File Size (MB)' )
-    plt.ylabel( 'Average Write Throughput (MB/s)', fontsize=12 )
+    if dtype == "write" :
+       plt.xlabel( 'File Size (MB)' )
+       plt.ylabel( 'Average Throughput (MB/s)', fontsize=12 )
 
     #plt.gca().ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
 
-    plt.plot(xdata, ydata, 'ro-')
+    style = 'bo-' if dtype == "read" else 'ro-'
+    plt.plot(xdata, ydata, style)
 
 
-    plt.savefig('WriteThroughput.png')
+    if dtype == "read" :
+       plt.legend(loc='best')   
+       plt.savefig('SmallFilesThroughput.png')
 
     print( "\tExit PlotDataByFileSize\n" )
 
@@ -322,8 +337,10 @@ if __name__ == '__main__' :
    dataPerFileSizeContainer = []
 
    for i in range(0,2) :
-       if i == 0   : print("\t\tGetting the data for writing files")
-       elif i == 1 : print("\t\tGetting the data for reading files")
+       #if i == 1 : continue
+
+       if i == 0   : print("  Getting the data for writing files")
+       elif i == 1 : print("  Getting the data for reading files")
 
        dtype = "write" if i == 0 else "read"
 
@@ -339,10 +356,14 @@ if __name__ == '__main__' :
        dataPerFileSize  = _OrganizeDataByFileSize( dataPerSessionID )
 
        dataPerFileSizeContainer.append( dataPerFileSize )
+
+
    
    for d, dataPerFileSize in enumerate(dataPerFileSizeContainer) :
        dtype = "write" if d == 0 else "read"
        _PlotDataByFileSize( dataPerFileSize, dtype )
+
+
 
    print( "Exit Analysis of the Prometheus Data\n" )
    
