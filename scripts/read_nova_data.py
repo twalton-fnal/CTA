@@ -3,6 +3,11 @@ import copy
 import datetime as dt
 import multiprocessing as mp
 
+import numpy as np
+import random as random
+import scipy as scipy
+from scipy.optimize import curve_fit
+
 from multiprocessing.pool import ThreadPool as Pool
 from time import sleep
 
@@ -53,7 +58,7 @@ def _GetEosDirectories() :
 """
 get the directory files
 """
-def _GetFilesOnTape( directory ) :
+def _GetFilesOnTape( directory, rnd ) :
 
     env  = "EOS_MGM_URL=root://storagedev201.fnal.gov XrdSecPROTOCOL=sss XrdSecSSSKT=/home/eos/cta_twalton.keytab"
     eos  = "eos ls -lhy %s" % (directory)
@@ -69,8 +74,29 @@ def _GetFilesOnTape( directory ) :
         if fi.find("d1::t1") != -1 : 
            tfiles.append( "%s/%s" % (directory,fi.split(" ")[-1]) )
         
+    if rnd != 1. :
+       nfiles = int( float(len(tfiles)) * rnd )
+       rfiles = random.sample(tfiles,nfiles)
+       return rfiles
+
     return tfiles
  
+
+"""
+write files to a text file
+"""
+def _WriteFilesToTextFile( idir, files ) :
+
+    date     = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = "/home/eos/prometheus/analysis/txt/rand-nova-files-%d-%s.txt" % (idir,date) 
+
+    outfile  = open(filename,"w")
+
+    for ifile in files :
+        outfile.write(ifile)
+        outfile.write("\n")
+
+    outfile.close()
 
   
 """
@@ -125,11 +151,15 @@ if __name__ == '__main__' :
    directories = _GetEosDirectories()
    print( "Retrive all directories [%d]" % len(directories) )
 
+   getPercentageOfFiles = 0.25 #1.0
+
    for d, directory in enumerate(directories) :
        print( "\tGetting files from directory [%s]" % directory )
 
-       filesOnTape = _GetFilesOnTape(directory) 
+       filesOnTape = _GetFilesOnTape(directory,getPercentageOfFiles) 
        print( "\tThe total number of files [%d]" % len(filesOnTape) )
+
+       _WriteFilesToTextFile(d,filesOnTape)
 
        _PrepareFilesForRead(filesOnTape) 
        
