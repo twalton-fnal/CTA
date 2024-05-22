@@ -307,17 +307,15 @@ def _PlotDataByFileSize( dataPerFileSize, dtype ) :
 
     if dtype == "write" :
        plt.xlabel( 'File Size (MB)' )
-       plt.ylabel( 'Average Throughput (MB/s)', fontsize=12 )
+       plt.ylabel( 'Average Transfer Speed (MB/s)', fontsize=12 )
 
-    #plt.gca().ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
 
     style = 'bo-' if dtype == "read" else 'ro-'
     plt.plot(xdata, ydata, style)
 
-
     if dtype == "read" :
-       plt.legend(loc='best')   
-       plt.savefig('SmallFilesThroughput.png')
+       plt.legend(["Write", "Read"],loc='best')   
+       plt.savefig('SmallFilesTransferSpeed.png')
 
     print( "\tExit PlotDataByFileSize\n" )
 
