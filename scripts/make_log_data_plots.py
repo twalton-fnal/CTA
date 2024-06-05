@@ -3,6 +3,8 @@
 
 import sys, re, os, time
 import matplotlib.pyplot as plt
+import numpy as np
+import scipy.stats
 from datetime import datetime
 
 
@@ -236,6 +238,47 @@ def _PlotReadDataByFilesize( dataPerFileSize, config ) :
 
 
 
+def _PlotReadDataScattered( data, config ) :
+    print( "\tEnter make read only scattered plots" )
+
+    xdata = []
+    for d in data[0] :
+        xdata.append( float(d) * 1.0e-6 )
+
+    ydata = data[3]
+
+    bin_edges = [ 0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0 ]
+    for b in range(12, 102, 2) :
+        bin_edges.append( b )
+
+    zoom_y = 10.0 if config == "read25" else 2.0
+
+    bins_y = [  50, 50 ]
+    name   = [ "Full", "ZoomIn" ]
+    ranges = [  None
+               ,[[bin_edges[0],bin_edges[-1]], [0,zoom_y]]
+             ]
+ 
+    for b, bin_y in enumerate(bins_y) :
+
+        fig, ax = plt.subplots()
+        plt.hist2d(xdata,ydata,bins=(bin_edges,bin_y),range=ranges[b],cmin=1,cmap='jet') #c=ydata,s='5%',marker='s',cmap='viridis')
+        plt.colorbar()
+
+        plt.xlabel( 'File Size (MB)' )
+        plt.ylabel( 'Position Time (s)', fontsize=12 )
+
+        if config == "read25" :
+           plt.title("Read 25% of the Data")
+           plt.savefig('NovaPartialFilesReadPositionTimeScattered%s.png' % name[b])
+        else :
+          plt.title("Read all of the Data")
+          plt.savefig('NovaFilesReadPositionTimeScattered%s.png' % name[b]) 
+
+
+    print( "\tExit make read only scattered plots" )
+
+
 
 
 ##########################################################################
@@ -246,6 +289,7 @@ if __name__ == '__main__' :
 
    print( "Enter Analysis of the Log Files\n" )
 
+   dataForAllFilesContainer      = []
    dataPerFileSizeContainer      = []
    readOnlyDataFileSizeContainer = []
 
@@ -265,6 +309,7 @@ if __name__ == '__main__' :
 
        dataPerFileSize  = _OrganizeDataByFileSize(bdata,config)
        dataPerFileSizeContainer.append(dataPerFileSize)
+       dataForAllFilesContainer.append(bdata)  
 
 
    for i in range(0,3) :
@@ -281,7 +326,7 @@ if __name__ == '__main__' :
        elif i == 2 : config = "read25"
        else : continue
        _PlotReadDataByFilesize( dataPerFileSizeContainer[i], config )
-
+       _PlotReadDataScattered( dataForAllFilesContainer[i], config )
 
    print( "Exit Analysis of the Log Files\n" )
    
