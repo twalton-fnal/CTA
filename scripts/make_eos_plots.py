@@ -14,7 +14,8 @@ if __name__ == '__main__' :
    env = "EOS_MGM_URL=root://storagedev201.fnal.gov XrdSecPROTOCOL=sss XrdSecSSSKT=/home/eos/cta_twalton.keytab"
 
    # get the subdirs
-   topdir = "/eos/ctaeos/cta/users/twalton/spring2024/data/"
+   config = "june2024" #"spring2024"
+   topdir = "/eos/ctaeos/cta/users/twalton/%s/data/" % config
 
    eos    = "eos ls %s" % topdir
    cmd    = "%s %s" % (env,eos)
@@ -69,6 +70,9 @@ if __name__ == '__main__' :
 
        print( "\tSubdir [%s], number of files [%d]" % (spath,len(fnames)) )
 
+       month = "May"
+       if config == "june2024" :
+          month = "Jun"
 
        # get the byte information
        bdata = []
@@ -82,7 +86,7 @@ if __name__ == '__main__' :
            binfo = ""
 
            if elem[0] == "d1::t1" :
-              idx = elem.index("May")
+              idx = elem.index(month)
               binfo = "%s %s" % (elem[idx-2],elem[idx-1])           
            else : 
               continue   
@@ -116,21 +120,27 @@ if __name__ == '__main__' :
           plt.gca().ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
           plt.title( "NOvA Analysis Fake Dataset" )
           plt.hist(x=bdata,bins=bin_edges,color='m',range=(amin,amax))
-          plt.savefig("NovaFakeDatasetOnEos.png")
+          plt.savefig("NovaFakeDatasetOnEos%s.png" % config)
 
        elif subdir == "randomfiles" : 
         
           bin_edges = [ 0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0 ]
+
+          print(len(bin_edges))
+          print(len(bdata))
 
           figure, axis = plt.subplots()
           plt.figure()
           plt.xlabel( 'File Size (MB)' )
           plt.ylabel( 'Number of Files' )
 
+          pcolor = 'c'
+          if config == "june2024" : pcolor = 'g'
+
           plt.gca().ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
           plt.title( "Single Data Bins Dataset" )
-          plt.hist(x=bdata,bins=bin_edges,color='c',range=(amin,amax))
-          plt.savefig("SingleBinDatasetOnEos.png")
+          plt.hist(x=bdata,bins=bin_edges,color=pcolor,range=(amin,amax))
+          plt.savefig("SingleBinDatasetOnEos%s.png" % config)
 
 
 

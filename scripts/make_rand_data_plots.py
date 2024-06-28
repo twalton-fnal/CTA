@@ -10,6 +10,8 @@ import sys, re, os, time
 import matplotlib.pyplot as plt
 from datetime import datetime
 
+config = "June2024" #May2024
+
 
 """
 Get the data by dates
@@ -17,6 +19,7 @@ Get the data by dates
 
 def _GetDataFilesExtRangeForWrite() :
 
+    """
     flist = [   ["2024-05-07-18-20-00", "2024-05-07-19-20-00",  "10"]
               , ["2024-05-07-20-00-00", "2024-05-07-21-15-00",  "9"]
               , ["2024-05-07-21-30-00", "2024-05-08-09-00-00",  "8"]
@@ -37,6 +40,15 @@ def _GetDataFilesExtRangeForWrite() :
               , ["2024-05-11-11-45-00", "2024-05-11-14-30-00",  "0.2"]
               , ["2024-05-11-15-10-00", "2024-05-11-17-15-00",  "0.1"]
             ]
+    """
+    flist = [   ["2024-06-26-13-30-00", "2024-06-26-14-00-00", "10"]
+              , ["2024-06-26-15-45-00", "2024-06-26-16-15-00", "7"]
+              , ["2024-06-26-18-30-00", "2024-06-26-19-00-00", "3"]
+              , ["2024-06-26-20-40-00", "2024-06-26-21-30-00", "1"]
+              , ["2024-06-26-23-00-00", "2024-06-26-23-45-00", "0.7"]
+              , ["2024-06-27-00-50-00", "2024-06-27-02-00-00", "0.4"]
+              , ["2024-06-27-03-00-00", "2024-06-27-03-20-00", "0.1"]
+            ]
 
     return flist
 
@@ -44,6 +56,7 @@ def _GetDataFilesExtRangeForWrite() :
 
 def _GetDataFilesExtRangeForRead() :
 
+    """
     flist = [   ["2024-05-11-19-30-00", "2024-05-11-22-00-00",  "10"] 
               , ["2024-05-11-23-15-00", "2024-05-12-00-30-00",  "9"]
               , ["2024-05-12-01-30-00", "2024-05-12-03-00-00",  "8"]
@@ -52,6 +65,15 @@ def _GetDataFilesExtRangeForRead() :
               , ["2024-05-12-13-50-00", "2024-05-12-15-30-00",  "5"]
               , ["2024-05-12-16-30-00", "2024-05-12-18-00-00",  "4"]
               , ["2024-05-12-19-00-00", "2024-05-14-14-00-00",  "3"]
+            ]
+    """
+    flist = [   ["2024-06-27-09-20-00", "2024-06-27-09-45-00", "10"]
+              , ["2024-06-27-11-00-00", "2024-06-27-11-30-00", "7"]
+              , ["2024-06-27-12-45-00", "2024-06-27-13-10-00", "3"]
+              , ["2024-06-27-14-25-00", "2024-06-27-14-50-00", "1"]
+              , ["2024-06-27-16-15-00", "2024-06-27-16-40-00", "0.7"]
+              , ["2024-06-27-20-00-00", "2024-06-27-20-20-00", "0.4"]
+              , ["2024-06-27-21-45-00", "2024-06-27-22-10-00", "0.1"]
             ]
 
     return flist
@@ -315,7 +337,7 @@ def _PlotDataByFileSize( dataPerFileSize, dtype ) :
 
     if dtype == "read" :
        plt.legend(["Write", "Read"],loc='best')   
-       plt.savefig('SmallFilesTransferSpeed.png')
+       plt.savefig('SmallFilesTransferSpeed%s.png' % config)
 
     print( "\tExit PlotDataByFileSize\n" )
 
@@ -354,7 +376,6 @@ if __name__ == '__main__' :
        dataPerFileSize  = _OrganizeDataByFileSize( dataPerSessionID )
 
        dataPerFileSizeContainer.append( dataPerFileSize )
-
 
    
    for d, dataPerFileSize in enumerate(dataPerFileSizeContainer) :

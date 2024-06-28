@@ -59,7 +59,7 @@ prepare the files for read
 def _PrepareFilesForRead( files ) :
 
     env = "EOS_MGM_URL=root://storagedev201.fnal.gov XrdSecPROTOCOL=sss XrdSecSSSKT=/home/eos/cta_twalton.keytab"
- 
+
     print( "\t\tDropping the files" )
     for i, ifile in enumerate(files) :
         #eos  = "eos stagerrm %s" % ifile 
@@ -72,7 +72,6 @@ def _PrepareFilesForRead( files ) :
 
         stdout, stderr = proc.communicate()
 
- 
     print( "\t\tCheck if the files are dropped from disk" )
     failed = []
 
@@ -92,7 +91,6 @@ def _PrepareFilesForRead( files ) :
     print( "\t\tNumber of files still on disk is [%d]" % len(failed) )
     if len(failed) == len(files) :
        sys.exit( "\tERROR: None of the files are removed from disk." )
-
 
     print( "\t\tTell eos to read the files" )
     for i, ifile in enumerate(files) :
@@ -119,15 +117,17 @@ if __name__ == '__main__' :
 
    print( "Enter Read Analysis of the Data\n" )
 
+   config = "june2024" #"spring2024"
+
    global RANDFILEDIR
-   RANFILEDIR = "/eos/ctaeos/cta/users/twalton/spring2024/data/randomfiles/"
+   RANFILEDIR = "/eos/ctaeos/cta/users/twalton/%s/data/randomfiles/" % config
+
 
    directories = _GetEosDirectories()
    print( "Retrive all directories [%d]" % len(directories) )
 
 
    for d, directory in enumerate(directories) :
-       if d != 0 : continue
 
        print( "\tGetting files from directory [%s]" % directory )
 
