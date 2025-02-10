@@ -9,7 +9,11 @@ import datetime as dt
 import multiprocessing as mp
 import itertools 
 
+from argparse import ArgumentParser as ap
+
 PWD = str(os.environ.get('PWD'))
+USER = str(os.environ.get('USER'))
+
 
 
 #------ helper functions  -----------------------------------
@@ -28,40 +32,45 @@ def _PoolInit(l):
     lock = l
 
 
-
 """
 get the size of files in directory
 """
 def _GetTopDirectorySize() :
-
     count_files_tb = 0.
     if not os.path.isdir(TOPDIR) : return count_files_tb
 
-    subdirs = os.listdir(TOPDIR)
-    for subdir in subdirs : 
-        fnames = os.listdir("%s/%s/" % (TOPDIR,subdir))
-        for fname in fnames :
-            fstats           = os.stat( "%s/%s/%s" % (TOPDIR,subdir,fname) )
-            created_filesize = fstats.st_size
-            cfsize_tb        = float(created_filesize) * 1e-12
-            count_files_tb  += cfsize_tb
+    bin_dirs = os.listdir(TOPDIR)
+    if len(bin_dirs) == 0 : return count_files_tb
 
+    for bin_dir in bin_dirs :
+        sub_dirs = os.listdir("%s/%s" % (TOPDIR,bin_dir))
+        if len(sub_dirs) == 0 : continue
+
+        for sub_dir in sub_dirs :
+            fnames = os.listdir("%s/%s/%s/" % (TOPDIR,bin_dir,sub_dir))
+            if len(fnames) == 0 : continue
+
+            for fname in fnames :
+                fstats           = os.stat( "%s/%s/%s/%s" % (TOPDIR,bin_dir,sub_dir,fname) )
+                created_filesize = fstats.st_size
+                cfsize_tb        = float(created_filesize) * 1e-12
+                count_files_tb  += cfsize_tb
+ 
     return count_files_tb
    
-
 
 """
 parse the Nova analysis dataset
 """
 def _GetNovaData() :
 
-    print( "\tEnter creating fake data based on NOvA analysis dataset\n\n")
+    print( "\tEnter get the NOvA data" )
 
     fake_file_sizes = []
     total_file_sizes = 0
 
     # open file and get file sizes
-    tdir  = "/exp/dune/app/users/twalton/CTA"
+    tdir  = PWD.replace("scripts","data")
     fnova = open("%s/nova.files.txt" % tdir, "r")
     lnova = fnova.readlines()
 
@@ -107,13 +116,13 @@ def _GetNovaData() :
     return fake_file_sizes
 
 
-
 """
 get the nova data bins
 size is in KB
 """
-def _OrganizeNovaDataFiles( data ) :
+def _OrganizeNovaDataFiles( data, minDataBin, maxDataBin ) :
 
+    print( "\tEnter organize the data files" )
     bins = []
 
     for idata in data :
@@ -122,64 +131,51 @@ def _OrganizeNovaDataFiles( data ) :
         r     = -1 * dlen
         dsize = int(round(dsize,r))
 
-        """
-        if dsize < 10000 : 
-           continue
-
-        if dsize > 80000 : 
-           continue
-        """
-
-        if dsize < 100 :
-           continue
-
-
-        if dsize >= 500 :
-           continue
-
-
-        if not dsize in bins :
-           bins.append(dsize)
+        if dsize >= minDataBin*1000 and dsize <= maxDataBin*1000 :
+           if not dsize in bins :
+              bins.append(dsize)
 
     bins.sort()
-    return bins        
 
+    print( "\tExit organize the data files with bins: [%d]\n\n" % len(bins) )
+    return bins        
 
 
 """
 create dataset with fake nova-like data
 """
-def _CreateNovaFakeData( data ) :
+def _CreateSingleBinnedFakeData( data ) :
 
-    print( "\tEnter CreateNovaFakeData\n" )
+    print( "\tEnter creating the single binned fake data" )
 
     nbytes = _GetTopDirectorySize()
 
     print( "\t\tInital byte count [%.3f TB] " % nbytes )
     print( "\t\tcpu count=[%d]\n" % mp.cpu_count() )
 
+    sys.exit()
+
     l = mp.Lock()
 
     try :
       pool   = mp.Pool(processes=mp.cpu_count(),initializer=_PoolInit,initargs=(l,))
-      result = pool.map(_CreateGenericDataTask,enumerate(data))
+      result = pool.starmap(_CreateGenericDataTask,enumerate(data))
     finally :
       pool.close()
       pool.join()
 
-
-    print( "\tExit CreateNovaFakeData\n" )
- 
     count_files_tb = _GetTopDirectorySize()
+
+    print( "\tExit creating the single binned fake data with size [%.3f TB]\n\n" % count_files_tb )
     return count_files_tb
 
 
 """
 create fake generic data
 """
-def _CreateGenericDataTask( (i,idata) ) :
+def _CreateGenericDataTask( i,idata ) :
 
-    print( "\t\tat line [%d] : [%d] directory and max file sizes [%.3f,%.3f]" % (i,idata,DIRSIZE,MAX_FILES_TB) )
+    print( "\t\tat line [%d] : [%d] directory and max file sizes [%.3f]" % (i,idata,DIRSIZE) )
 
     max_files = 2000
 
@@ -194,7 +190,6 @@ def _CreateGenericDataTask( (i,idata) ) :
     value = float(idata) / 1000
     data_byte = int(value * 1024)
     
-
     # create the files
     for m in range(0,max_files) :
         date      = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -204,7 +199,6 @@ def _CreateGenericDataTask( (i,idata) ) :
         process   = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
         pipe      = process.communicate()[0].split()
  
-
     # get the directory size
     count_files_mb = 0.
     fnames = os.listdir("%s" % (subpath))
@@ -215,7 +209,6 @@ def _CreateGenericDataTask( (i,idata) ) :
         count_files_mb  += cfsize_mb
 
     print("\t\tdirectory size [%.3f]" % count_files_mb)
-
     return True
 
 
@@ -227,28 +220,31 @@ def _CreateGenericDataTask( (i,idata) ) :
 #-----------------------------------------------------------------------------
 if __name__ == '__main__' :
 
-   print( "Create fake data based on NOvA analysis dataset\n\n")
+   print( "Enter create fake single-binned datasets\n")
+
+   # input arguments
+   parser = ap()
+   parser.add_argument('--outdir', type=str, default="/pnfs/dune/scratch/users/%s/CTA_LTO9/SingleBinnedFakeData/" % USER, help="The location of the output data [default: %default]")
+   parser.add_argument('--min', type=int, default=10, help="The minimum file size to generate, where the default is %default MB" )
+   parser.add_argument('--max', type=int, default=200, help="The maximum file size to generate, where the default is %default MB" )
+   args = parser.parse_args()
+
+   # store files in this directory
+   outdir = args.outdir
+   if not os.path.isdir(outdir) :
+      print( "\tCreating the top output directory [%s]" % outdir )
+      os.makedirs(outdir)
+   global TOPDIR
+   TOPDIR = outdir
 
    # get the nova data
    nova_data = _GetNovaData()
 
    # organize the nova data
-   sort_file_sizes = _OrganizeNovaDataFiles(nova_data)
+   sort_file_sizes = _OrganizeNovaDataFiles(nova_data,args.min,args.max)
 
-   global TOPDIR
-   TOPDIR = "/pnfs/dune/scratch/users/twalton/UpgradedCTA/RandomTestGenericData/"  #RandomTestGenericTest
-   if not os.path.isdir(TOPDIR) :
-      print( "\tCreating the top directory [%s]" % TOPDIR )
-      os.makedirs(TOPDIR)
-
-
-   # max number of files to create
-   global MAX_FILES_TB
-   MAX_FILES_TB   = 6.0
-
-   # create dataset with fake nova-like data
-   count_files_tb = _CreateNovaFakeData(sort_file_sizes)  
-
+   # create dataset with fake single-binned data
+   count_files_tb = _CreateSingleBinnedFakeData(sort_file_sizes)  
 
    print( "\tSuccessful created a fake dataset size [%.3f]" % count_files_tb ) 
-   print( "\nCompleted creating fake data based on NOvA analysis dataset\n\n")
+   print( "Exit creating the fake single-binned datasets\n\n")

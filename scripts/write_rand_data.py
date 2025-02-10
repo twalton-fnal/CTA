@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import os, sys, signal, string, re, shutil, math, subprocess, json
 import copy
 import datetime as dt
@@ -6,8 +8,11 @@ import multiprocessing as mp
 from multiprocessing.pool import ThreadPool as Pool
 from time import sleep
 
+from argparse import ArgumentParser as ap
 
 PWD = str(os.environ.get('PWD'))
+USER = str(os.environ.get('USER'))
+
 
 
 """
@@ -18,31 +23,13 @@ def _PoolInit(l):
     lock = l
 
 
-"""
-directories to skip
-"""
-def _SkipSubdirectories( dir ) :
-   
-    dlist = [ "100",    "200",    "300",   "400",   "500",   "600",   "700",   "800",   "900",   
-              "1000",   "2000",   "3000",  "4000",  "5000",  "6000",  "7000",  "8000",  "9000",   
-              "10000",  "20000",  "30000", "40000", "50000", "60000", "70000", "80000", "90000", 
-              "100000", "200000"  ]
-
-    if dir in dlist :
-       return True
-    
-    return False
-
-
 
 """
 get all of the files
 """
 def _GetAllFiles( topdir ) :
-
     fake_files = []
-
-    subdirs = os.listdir(topdir)
+    subdirs    = os.listdir(topdir)
     for subdir in subdirs :
         subpath = "%s/%s" % (topdir,subdir)
 
@@ -50,7 +37,6 @@ def _GetAllFiles( topdir ) :
            continue
 
         sfiles = os.listdir(subpath)
-
         for s in sfiles :
             fpath = "%s/%s" % (subpath,s)
             fake_files.append(fpath)
@@ -58,51 +44,18 @@ def _GetAllFiles( topdir ) :
     return fake_files
 
 
-"""
-check the status of the files
-"""
-def _CheckFilesStatus( subdir ) :
-    success = False
-
-    status  = []
-
-    eosdir  = "/eos/ctaeos/cta/users/twalton/spring2024/data/randomfiles/"
-    eosenv  = "EOS_MGM_URL=root://storagedev201.fnal.gov XrdSecPROTOCOL=sss XrdSecSSSKT=/home/eos/cta_twalton.keytab"
-    eoscmds = [   "eos ls -lhy %s/%s | wc -l" % (eosdir,subdir)
-                , "eos ls -lhy %s/%s | grep -i \"d1::t1\" | wc -l" % (eosdir,subdir)
-                , "eos ls -lhy %s/%s | grep -i \"d1::t0\" | wc -l" % (eosdir,subdir)
-              ]
-
-    for eoscmd in eoscmds :
-        cmd = "%s %s" % (eosenv,eoscmd)
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-        stdout, stderr = proc.communicate()
-        status.append( int(stdout.strip()) )
-
-
-    print( "\t\ttotal number of files in directory, on tape, not on tape [%d : %d : %d]" % (status[0],status[1],status[2]) )
-
-    if status[0] == status[1] :
-       success = True
-
-    return success
-
-
 
 """
 remove files of size 0 bytes
 """
-def removeZeroByteFiles( tmpfiles ) :
-
-    env    = "EOS_MGM_URL=root://storagedev201.fnal.gov XrdSecPROTOCOL=sss XrdSecSSSKT=/home/eos/cta_twalton.keytab"
-    eosdir = "/eos/ctaeos/cta/users/twalton/spring2024/data/randomfiles/"
+def removeZeroByteFilesOnEOS( tmpfiles ) :
+    env    = EOS_ENV
+    eosdir = OUTDIR 
     nfiles = 0
-
 
     for t, tmpfile in enumerate(tmpfiles) :
         subdir   = tmpfile.split("/")[-3]
         randfile = tmpfile.split("/")[-1]
-
         filepath = "%s/%s/%s" % (eosdir,subdir,randfile)
  
         if t == 0 :
@@ -129,18 +82,17 @@ def removeZeroByteFiles( tmpfiles ) :
            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
            nfiles += 1 
       
-
     print("\t\tnumber of files removed [%d]" % nfiles)
     return tmpfiles
+
 
 
 """
 get files that have not been copied
 """
-def _GetFilesNotCopyToStorageMachine( tmpfiles ) :
-
+def _GetFilesNotCopyToEOS( tmpfiles ) :
     good_files = copy.deepcopy(tmpfiles)
-    copy_files = _GetCopiedFiles()
+    copy_files = _GetCopiedFilesAtEOS()
 
     for copy_file in copy_files :
         for g, good_file in enumerate(good_files) :
@@ -152,18 +104,16 @@ def _GetFilesNotCopyToStorageMachine( tmpfiles ) :
     return good_files 
 
 
+
 """
 the task for get files that have not been copied
 """
-def _GetCopiedFiles() :
-
-    dir  = "/eos/ctaeos/cta/users/twalton/spring2024/data/randomfiles/"
-
-    env  = "EOS_MGM_URL=root://storagedev201.fnal.gov XrdSecPROTOCOL=sss XrdSecSSSKT=/home/eos/cta_twalton.keytab"
+def _GetCopiedFilesAtEOS() :
+    dir  = OUTDIR
+    env  = EOS_ENV
     eos  = "eos ls %s" % (dir)
     cmd  = "%s %s" % (env,eos)
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-
     stdout, stderr = proc.communicate()
 
     subdirs = stdout.strip().split("\n")
@@ -176,7 +126,6 @@ def _GetCopiedFiles() :
 
         stdout, stderr = proc.communicate()
         tmp_files = stdout.strip().split("\n")
-
         sfiles.extend(tmp_files)
 
     return sfiles
@@ -186,21 +135,20 @@ def _GetCopiedFiles() :
 """
 eos cp files
 """
-def _CopyFilesFromdCacheTask( (i,ifile) ) :
-
+def _CopyFilesFromdCacheScratchToEOSTask( i,ifile ) :
     incr = 500
 
     if i%incr == 0 :
        print( "\t\tAt line [%d], copying the file [%s] to storagedev201.fnal.gov" % (i,ifile) )
 
-    max_files = 12000 #5000
-    dir       = "/eos/ctaeos/cta/users/twalton/spring2024/data/randomfiles/"
+    max_files = MAX_FILES
+    dir       = OUTDIR
     sub       = ""
 
     byte_dir  = ifile.split("/")[9] 
     full_dir  = "%s/%s" % (dir,byte_dir)
     
-    env  = "EOS_MGM_URL=root://storagedev201.fnal.gov XrdSecPROTOCOL=sss XrdSecSSSKT=/home/eos/cta_twalton.keytab"
+    env  = EOS_ENV
     eos  = "eos ls -yh %s | wc -l" % (full_dir)
     cmd  = "%s %s" % (env,eos)
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
@@ -211,7 +159,6 @@ def _CopyFilesFromdCacheTask( (i,ifile) ) :
        cmd  = "%s %s" % (env,eos)
        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
        stdout, stderr = proc.communicate()
-       #print("\t\tCreated directory using the command [%s]" % cmd )
     elif int(stdout.strip()) > max_files :
        return True
       
@@ -233,76 +180,203 @@ def _CopyFilesFromdCacheTask( (i,ifile) ) :
     return True
 
 
+
 """
 eos cp files
 """
-def _CopyFilesFromdCache() :
+def _CopyFilesFromdCacheScratchTodCacheTask( i,ifile ) :
+    incr = 500
 
-    print( "\tEnter CopyFilesFromdCache")
+    if i%incr == 0 :
+       print( "\t\tAt line [%d], copying the file [%s] to storagedev201.fnal.gov" % (i,ifile) )
 
+    max_files = MAX_FILES
+    tdir      = OUTDIR
+    sub       = ""
+
+    byte_dir  = ifile.split("/")[9] 
+    full_dir  = "%s/%s" % (dir,byte_dir)
+    
+    env       = DCACHE_ENV
+    dcache    = ""
+    cmd       = "%s %s" % (env,dcache)
+    proc      = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    stdout, stderr = proc.communicate()
+
+    if int(stdout.strip()) == 0 :
+       dcache = ""
+       cmd    = "%s %s" % (env,dcache)
+       proc   = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+       stdout, stderr = proc.communicate()
+    elif int(stdout.strip()) > max_files :
+       return True
+      
+    dcache = "cp %s %s" % (ifile,full_dir)
+    cmd    = "%s %s" % (env,eos)
+    proc   = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    stdout, stderr = proc.communicate()
+
+    if i%incr == 0 :
+       print( "\t\tcmd [%s]" % cmd )
+       print( "\t\tstdout [%s]" % stdout )
+
+    if proc.returncode != 0 :
+       print( "============== error code start =========================")
+       print( "\t\tAt line [%d], warning::[%s]" % (i,stderr) )
+       print( "\t\tAt line [%d], cmd;;[%s]" % (i,cmd) )
+       print( "============== error code end ===========================")
+
+    return True
+
+
+
+"""
+check the status of the files that are copied to EOS disk
+"""
+def _CheckFilesStatusOnEOS( subdir ) :
+    success = False
+    status  = []
+
+    eosdir  = OUTDIR
+    eosenv  = EOS_ENV
+    eoscmds = [   "eos ls -lhy %s/%s | wc -l" % (eosdir,subdir)
+                , "eos ls -lhy %s/%s | grep -i \"d1::t1\" | wc -l" % (eosdir,subdir)
+                , "eos ls -lhy %s/%s | grep -i \"d1::t0\" | wc -l" % (eosdir,subdir)
+              ]
+
+    for eoscmd in eoscmds :
+        cmd = "%s %s" % (eosenv,eoscmd)
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+        stdout, stderr = proc.communicate()
+        status.append( int(stdout.strip()) )
+
+    print( "\t\ttotal number of files in directory, on tape, not on tape [%d : %d : %d]" % (status[0],status[1],status[2]) )
+
+    if status[0] == status[1] :
+       success = True
+
+    return success
+
+
+
+"""
+check the status of the files that are copied to dCache disk
+"""
+def _CheckFilesStatusOndCache( subdir ) :
+    success = False
+    status  = []
+
+    ddir    = OUTDIR
+    denv    = DCACHE_ENV
+
+    print( "\t\ttotal number of files in directory, on tape, not on tape [%d : %d : %d]" % (status[0],status[1],status[2]) )
+
+    if status[0] == status[1] :
+       success = True
+
+    return success
+
+
+
+"""
+copy files from dCache scratch to EOS or dCache pool disk
+"""
+def _CopyFilesFromdCacheScratch(disk,indir,skipdirs) :
+
+    print( "\tEnter copying files from dCache scratch")
+
+    #----------------------------------
     # get the files on dCache
-    topdir = "/dcache/dune/scratch/users/twalton/UpgradedCTA/RandomTestGenericData/"
-
+    #----------------------------------
+    topdir = indir
     if not os.path.isdir(topdir) :
        sys.exit( "\tThe directory [%s] does not exist. Cannot continue." % topdir )
 
-    print( "\t\tloop over the subdirectories" )
+    print( "\t\tGet the subdirectories in the folder [%d]" % indir )
     subdirs = os.listdir(topdir)
     subdirs = map(int, subdirs)
     subdirs.sort()
     subdirs.reverse()
-    
+
+    #------------------------------------------------
+    # loop over subdirectories
+    #------------------------------------------------
     for subdir in subdirs :
         subpath = "%s/%d" % (topdir,subdir)
         if not os.path.isdir(subpath) :
            print( "\t\t warning: the subdirectory does not exist [%s]" % subpath )
            continue
+        else :
+           print( "\t\tAt the subdirectory [%s]" % subpath )
 
-        print( "\n\t\tchecking to skip the directory" )
-        if _SkipSubdirectories( "%d" % subdir ) :
-           print( "\n\t\tskipping the subdir [%s]" % subdir )
-           continue
+        if len(skipdirs) != 0 :
+           if subdir in skipdirs :
+              print( "\t\t  skipping the subdirectory [%s]" % subdir )
+              continue
+ 
+        tmp_files = _GetAllFiles(subpath)
+        print( "\t\t\tnumber of files [%d]" % len(tmp_files) )
 
-        print( "\n\t\tgetting all of the files from subdirectory [%s]" % subpath )
+        #--------------------------------------------
+        # sanity checks for copying files
+        #--------------------------------------------
+        if disk == "eos" :
+           tmp_files = removeZeroByteFilesOnEOS( tmp_files )
+           print( "\t\t\tnumber of files is [%d]" % len(tmp_files) )
 
-        tmp_files  = _GetAllFiles(subpath)
-  
-        print( "\n\t\tremoving empty files" )
-        removeZeroByteFiles( tmp_files )
+           fake_files = _GetFilesNotCopyToEOS(tmp_files)
+           print( "\t\tcopying the remaining files [%d] to test stand machine" % len(fake_files) )
+        elif disk == "dcache" :
+             fake_files = tmp_files
 
-        print( "\t\t\tnumber of files is [%d]" % len(tmp_files) )
-        print( "\t\tremoving files found on test stand machine" )
-
-        fake_files = _GetFilesNotCopyToStorageMachine(tmp_files)
-        print( "\t\tcopying the remaining files [%d] to test stand machine" % len(fake_files) )
-
+        #-------------------------------------
+        # check the number of files
+        #-------------------------------------
         if len(fake_files) == 0 :
-           print( "\tThere are not any files to copy" )
+           print( "\t\tThe directory [%s] does not have any files to copy from scratch to disk." % subpath )
            continue
+        else :
+           print( "\t\tBegin copying the files at time: [%s]" % dt.datetime.now().strftime("%Y-%m-%d-%H-%M-%S") )
 
-        worker_nodes = 8
+        #--------------------------
+        # begin copying
+        #--------------------------
+        try :
+            pool = mp.Pool(processes=mp.cpu_count(),initializer=_PoolInit,initargs=(l,))
+            if disk == "eos" : 
+               result = pool.starmap(_CopyFilesFromdCacheScratchToEOSTask,enumerate(fake_files))
+            elif disk == "dcache" :
+               result = pool.starmap(_CopyFilesFromdCacheScratchTodCacheTask,enumerate(fake_files))
+        finally :
+            pool.close()
+            pool.join()
 
-        print( "\t\ttime for starting [%s]" % dt.datetime.now().strftime("%Y-%m-%d-%H-%M-%S") )
+        print( "\t\tCompleted copying at time: [%s]" % dt.datetime.now().strftime("%Y-%m-%d-%H-%M-%S") )
 
-        pool   = Pool(processes=worker_nodes) 
-        result = pool.map(_CopyFilesFromdCacheTask,enumerate(fake_files))
-
-        print("\t\tfinished the copying")
-
-        pool.close()
-        pool.join()
-
-        print( "\t\ttime for ending [%s]" % dt.datetime.now().strftime("%Y-%m-%d-%H-%M-%S") )
-        print( "\t\tstop copying for 30 minutes")
+        #------------------------------------------------------
+        # wait before starting with the next bins
+        #------------------------------------------------------
+        seconds = 1800
+        print( "\t\tWaitng for [%d] seconds to proceed with the next subdirectory." % seconds )
         sleep(1800)
 
-        print( "\t\tcheck if all files are on tape" )
-        success = _CheckFilesStatus(subdir)
-        if not success :
-           sys.exit( "All files are not on tape... exiting..\n\n" )
- 
+        #-------------------------------------
+        # check the status of copying
+        #-------------------------------------
+        success = False
+        if disk == "eos" :
+           success = _CheckFilesStatusOnEOS(subdir)
+        elif disk == "dcache" :
+           success = _CheckFilesStatusOndCache(subdir)
 
-    print( "\tExit CopyFilesFromdCache")
+        if not success :
+           sys.exit( "\t\tAll files are not on tape... exiting..\n\n" )
+        else :
+           print( "\t\tAll files are on tape.")
+
+    print( "\tExit copying files from dCache scratch\n\n")
+
+
 
 
 #-----------------------------------------------------------------------------
@@ -314,6 +388,36 @@ if __name__ == '__main__' :
 
    print( "\nEnter write random fake data to tape\n" )
 
-   _CopyFilesFromdCache()
+   # input arguments
+   parser = ap()
+   parser.add_argument('--disk', type=str, default="dCache", require=True, help="The disk location to copy files (eos or dCache) [default=%default]")
+   parser.add_argument('--indir', type=str, default="/pnfs/dune/scratch/users/%s/CTA_LTO9/SingleBinnedData/" % USER, help="The location of the data on dCache scratch [default: %default]")
+   parser.add_argument('--dir', type=str, default="/pnfs/dune/scratch/users/%s/CTA_LTO9/SingleBinnedData/" % USER, help="The location of the copied data on disk [default: %default]")
+   parser.add_argument('--skip', nargs='+', default=[], help="A list of directories to skip (eg. 10000)" )
+   parser.add_argument('--nfiles', type=int, default=10000, help="The maximum number of files to copy from scratch to disk, where the default is %default")
+   args = parser.parse_args()
+
+   # EOS environment variables
+   global EOS_ENV
+   EOS_ENV ="EOS_MGM_URL=root://storagedev201.fnal.gov XrdSecPROTOCOL=sss XrdSecSSSKT=/home/eos/cta_twalton.keytab"
+
+   # dcache environment variables
+   global DCACHE_ENV
+   DCACHE_ENV =""
+
+   # output directory 
+   global OUTDIR
+   OUTDIR = args.dir # /eos/ctaeos/cta/users/twalton/spring2024/data/randomfiles/
+
+   # check input directory
+   if not os.path.isdir(args.indir) :
+      sys.exit( "\tThe directory [%s] does not exist. Cannot continue." % args.indir )
+
+   # set the maximum number of files
+   global MAX_FILES
+   MAX_FILES = args.nfiles
+
+   # copy files to disk (CTA will write the files from disk to tape)
+   _CopyFilesFromdCacheScratch(args.disk.lower(),args.indir,args.skip)
 
    print( "Exit write random fake data to tape\n" )

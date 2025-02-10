@@ -1,8 +1,5 @@
 #!/usr/local/bin python
 
-"""
-works with python3
-"""
 
 import os, sys, signal, string, re, shutil, math, subprocess, json
 
@@ -16,7 +13,11 @@ import matplotlib.pyplot as plt
 import scipy as scipy
 from scipy.optimize import curve_fit
 
+from argparse import ArgumentParser as ap
+
 PWD = str(os.environ.get('PWD'))
+USER = str(os.environ.get('USER'))
+
 
 
 """
@@ -25,6 +26,17 @@ initializer for multiprocessing
 def _PoolInit(l):
     global lock
     lock = l
+
+"""
+get the plot directory
+"""
+def _GetPlotDirectory() :
+    plotdir = PWD.replace("scripts","plots")
+    if not os.path.isdir(plotdir) :
+       print( "\t\tCreating the plot directory [%s]" % plotdir )
+       os.makedirs(plotdir)
+    return plotdir
+
 
 
 """
@@ -46,7 +58,6 @@ def _GetTopDirectoryFileCount() :
 get the size of files in directory
 """
 def _GetTopDirectorySize() :
-
     count_files_tb = 0.
     if not os.path.isdir(TOPDIR) : return count_files_tb
 
@@ -67,7 +78,7 @@ make plots
 """
 def _MakeNovaPlot( ndata, pname, color ) :
 
-    print( "\tEnter make data plots\n\n")
+    print( "\tEnter make data plots")
 
     mb_threshold  = 100
    
@@ -75,7 +86,6 @@ def _MakeNovaPlot( ndata, pname, color ) :
     amin  = 0.
     amax  = 100
 
-    
     bin_edges = [ 0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0 ]
     for b in range(12, 102, 2) :
        bin_edges.append( b )
@@ -85,17 +95,18 @@ def _MakeNovaPlot( ndata, pname, color ) :
     figure, axis = plt.subplots()
 
     plt.figure()
-
     plt.xlabel( 'File Size (MB)' )
     plt.ylabel( 'Number of Files' ) #, fontsize=12 )
-
     plt.gca().ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
-
     plt.title( title )
 
     ( n )  = plt.hist(x=ndata,bins=bin_edges,color=color,range=(amin,amax))
 
-    plt.savefig(pname)
+    plotdir   = _GetPlotDirectory()
+    full_name = "%s/%s" % (plotdir,pname)
+    plt.savefig(full_name)
+
+    print( "\t\tCreated the file [%s]" % full_name )
 
     ydata = n[0]
     xdata = n[1]
@@ -116,7 +127,7 @@ def _GetNovaData() :
     total_file_sizes = 0
 
     # open file and get file sizes
-    tdir  = "/exp/dune/app/users/twalton/CTA"
+    tdir  = PWD.replace("scripts","data") 
     fnova = open("%s/nova.files.txt" % tdir, "r")
     lnova = fnova.readlines()
 
@@ -189,14 +200,11 @@ def _GaussFit( x, mu, sigma, c ) :
 
 def _ManyPeaksGaussFit( x, *params ) :
     y = np.zeros_like(x)
-
     for i in range(0, len(params), 3 ) :
         mean   = params[i]
         width  = params[i+1]
         height = params[i+2]
-
         y = y + _GaussFit( x, mean, width, height ) 
-
     return y
 
 
@@ -205,7 +213,7 @@ fit the nova data
 """
 def _FitNovaData( ydata, xdata ) :
 
-    print( "\tEnter fit the data\n\n")
+    print( "\tEnter fit the data")
 
     xdata = np.asarray(xdata)
     ydata = np.asarray(ydata)
@@ -214,7 +222,6 @@ def _FitNovaData( ydata, xdata ) :
     initial = [ 10., 5., 70000, 25, 8, 25000, 65, 1, 8000, 85, 3, 175000, 95, 1, 100000 ]
 
     parameters, covariance = curve_fit(_ManyPeaksGaussFit, xdata, ydata, p0=initial) #,bounds=(0,15) )
-
     fresults = _ManyPeaksGaussFit( xdata, *parameters )
 
     plt.clf()
@@ -222,10 +229,14 @@ def _FitNovaData( ydata, xdata ) :
     plt.plot(xdata, fresults, '-', label='fit')
     plt.legend()
 
-    pname = "NovaDatasetSmallFileSizeFit.png" 
-    plt.savefig(pname)
+    pname     = "NovaDatasetSmallFileSizeFit.png" 
+    plotdir   = _GetPlotDirectory()
+    full_name = "%s/%s" % (plotdir,pname)
 
+    plt.savefig(full_name)
+    print( "\t\tCreated the file [%s]" % full_name )
     print( "\tExit fit the data\n\n")
+
     return fresults
 
 
@@ -235,10 +246,9 @@ get probabilty for each data bin
 """
 def _GetBinProbability( xdata, ydata ) :
 
-    print( "\tEnter get the probability per bin\n\n" )
+    print( "\tEnter get the probability per bin" )
 
     total = 0.
-
     for y in ydata :
         total += y
 
@@ -254,6 +264,7 @@ def _GetBinProbability( xdata, ydata ) :
         x = xdata[i]
         values.append( [x,p] ) 
 
+    print( "\t\tRetrieve [%d] values." % len(values) )
     print( "\tExit get the probability per bin\n\n" )
     return values 
 
@@ -261,9 +272,9 @@ def _GetBinProbability( xdata, ydata ) :
 """
 generate distribution based on nova data
 """
-def _GenerateNovaFakeData( probs ) :
+def _GenerateNovaFakeData( probs, prob_size ) :
 
-    print( "\tEnter generate the fake distribution\n\n" )
+    print( "\tEnter generate the fake distribution" )
 
     fdata = []
     fprob = []
@@ -272,21 +283,21 @@ def _GenerateNovaFakeData( probs ) :
         fdata.append( prob[0] )
         fprob.append( prob[1] )
 
-    max     = MAX_FILES_TB * 1.0e6
-    total   = 0.
-    results = []
-
+    datavolume = MAX_FILES_TB * 1.0e6
+    total      = 0.
+    results    = []
    
-    while total < max : 
-       values = random.choice(fdata,p=fprob,size=(1000))
+    while total < datavolume : 
+       values = random.choice(fdata,p=fprob,size=(prob_size))
        for value in values :
            total += value
        results.extend(values)
 
-    pname = "NovaDatasetSmallFileSizeFake.png"
+    pname = "NovaDatasetSmallFileRandomChoice.png"
     color = "r"
     _MakeNovaPlot( results, pname, color )
 
+    print( "\t\tGenerate [%d] numerical values" % len(results) )
     print( "\tExit generate the fake distribution\n\n" )
     return results
 
@@ -295,7 +306,7 @@ def _GenerateNovaFakeData( probs ) :
 """
 create dataset with fake nova-like data
 """
-def _CreateNovaFakeData( data ) :
+def _GenerateNovaFakeDataFiles( data, min_filesize, max_filesize ) :
 
     print( "\tEnter CreateNovaFakeData with ndata [%d]\n" % len(data) )
     print( "\t\tcpu count=[%d]" % mp.cpu_count() )
@@ -308,17 +319,19 @@ def _CreateNovaFakeData( data ) :
     adata = []
     for a in range(0,len(data),max_files_dir) :
         tmp = []
-        min = a
-        max = min + max_files_dir
-        for b in range(min,max) :
-            if b < len(data) : tmp.append( data[b] )
+        amin = a
+        amax = amin + max_files_dir
+        for b in range(amin,amax) :
+            if b < len(data) : 
+               if data[b] >= min_filesize and data[b] <= max_filesize :
+                  tmp.append( data[b] )
         adata.append( tmp )
 
-    print( "\t\tnumber of subdirectories with a maximum of %d files [%d]\n" % (max_files_dir,len(adata)) )
+    print( "\t\tnumber of subdirectories [%d] with the maximum number files: [%d]\n" % (len(adata),max_files_dir) )
 
     try :
       pool   = mp.Pool(processes=mp.cpu_count(),initializer=_PoolInit,initargs=(l,))
-      result = pool.starmap(_CreateNovaFakeDataTask,enumerate(adata))
+      result = pool.starmap(_CreateNovaFakeDataFilesTask,enumerate(adata))
     finally :
       pool.close()
       pool.join()
@@ -329,7 +342,7 @@ def _CreateNovaFakeData( data ) :
 """
 create dataset with fake nova-like data
 """
-def _CreateNovaFakeDataTask( i, idata ) :
+def _CreateNovaFakeDataFilesTask( i, idata ) :
 
     # verbosity
     print( "\t\tat line [%d] in enter CreateNovaFakeDataTask" % i )
@@ -367,10 +380,9 @@ def _CreateNovaFakeDataTask( i, idata ) :
 """
 plot the fake data
 """
-def _MakeFakeNovaPlot() :
+def _MakeNovaFakeFilesPlot() :
 
-    print( "\tEnter make plot for generated data\n\n" )
-
+    print( "\tEnter make plot for generated data" )
     fdata = []
 
     subdirs = os.listdir(TOPDIR)
@@ -386,7 +398,7 @@ def _MakeFakeNovaPlot() :
             cfsize_mb        = float(created_filesize) * 1e-6
             fdata.append( cfsize_mb )
 
-    pname = "NovaDatasetSmallFileSizedCache.png"
+    pname = "NovaDatasetFakeSmallFiles.png"
     color = "orange"
     _MakeNovaPlot(fdata,pname,color)
 
@@ -404,17 +416,28 @@ if __name__ == '__main__' :
 
    print( "Create fake data based on NOvA analysis dataset\n\n")
 
+
+   # input arguments
+   parser = ap()
+   parser.add_argument('--outdir', type=str, default="/pnfs/dune/scratch/users/%s/CTA_LTO9/NovaFakeData/" % USER, help="The location of the output data [default: %default]")
+   parser.add_argument('--size', type=float, default=4.0, help="The size of the fake dataset in TB (default: %default TB)")
+   parser.add_argument('--min', type=float, default=10., help="The minimum file size to generate, where the default is %default MB" )
+   parser.add_argument('--max', type=float, default=100., help="The maximum file size to generate, where the default is %default MB" )
+   parser.add_argument('--prob_size', type=int, default=1000, help="The size parameter in the random choice function, where the default is %default" )
+   args = parser.parse_args()
+
+
    # store files in this directory
+   outdir = args.outdir
+   if not os.path.isdir(outdir) :
+      print( "\tCreating the top output directory [%s]" % outdir )
+      os.makedirs(outdir)
    global TOPDIR
-   TOPDIR = "/pnfs/dune/scratch/users/twalton/CTA/RandomFakeNovaData/"
-   #TOPDIR = "/exp/dune/data/users/twalton/CTAData/RandomFakeNovaData/"
-   if not os.path.isdir(TOPDIR) :
-      print( "\tCreating the top directory [%s]" % TOPDIR )
-      os.makedirs(TOPDIR)
+   TOPDIR = outdir
 
    # max number of files to create
    global MAX_FILES_TB
-   MAX_FILES_TB = 4.0
+   MAX_FILES_TB = args.size
 
    # get the nova data
    nova_data = _GetNovaData()
@@ -432,13 +455,13 @@ if __name__ == '__main__' :
    probs = _GetBinProbability(pdata[1],pdata[0])
 
    # generate fake data
-   fake_values = _GenerateNovaFakeData( probs )   
+   fake_values = _GenerateNovaFakeData( probs, args.prob_size )   
 
    # generate rand files
-   _CreateNovaFakeData( fake_values )
+   _GenerateNovaFakeDataFiles( fake_values, args.min, args.max )
 
    # plot distribution of fake files
-   _MakeFakeNovaPlot() 
+   _MakeNovaFakeFilesPlot() 
 
    # count the dataset size
    nfiles = _GetTopDirectoryFileCount()
