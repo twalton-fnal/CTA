@@ -1,3 +1,5 @@
+# author T. Walton
+
 import os, sys, signal, string, re, shutil, math, subprocess, json
 import copy
 import datetime as dt
