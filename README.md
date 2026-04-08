@@ -9,4 +9,4 @@
 > This workflow analyzes fake data that are generated and stored on dCache scratch disk. 
 > The generated data are produced via the python scripts, "make_fake_nova_data.py" and "make_fake_rand_data.py" 
 > The scripts are deployed and executed in a python virtual environment.
-> First step involves creating a python virtual environment.
+> The first step involves creating a python virtual environment.
